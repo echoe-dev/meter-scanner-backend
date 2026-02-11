@@ -1,3 +1,4 @@
+from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI, UploadFile, File
 from fastapi.responses import StreamingResponse
 from typing import List
