@@ -1,26 +1,27 @@
-from fastapi.middleware.cors import CORSMiddleware
 from fastapi import FastAPI, UploadFile, File
-from fastapi.responses import StreamingResponse
+from fastapi.middleware.cors import CORSMiddleware
+from fastapi.responses import JSONResponse
 from typing import List
 import cv2
 import numpy as np
 import io
-import csv
 
-origins = [
-    "http://localhost:5500",  # your frontend origin
-    "http://127.0.0.1:5500",  # sometimes needed
-    "*",  # allow all origins (not recommended for production)
 app = FastAPI()
+
+# ✅ CORS setup
+origins = [
+    "http://localhost:5500",  # your local frontend
+    "http://127.0.0.1:5500",
+    "https://your-frontend-domain.com"  # add your deployed frontend domain
+]
 
 app.add_middleware(
     CORSMiddleware,
-    allow_origins=["*"],
+    allow_origins=origins,  # or ["*"] to allow all origins
     allow_credentials=True,
     allow_methods=["*"],
     allow_headers=["*"],
 )
-
 
 @app.get("/")
 def home():
@@ -28,32 +29,34 @@ def home():
 
 @app.post("/scan")
 async def scan(files: List[UploadFile] = File(...)):
-
     results = []
-    detector = cv2.barcode_BarcodeDetector()
 
     for file in files:
-        contents = await file.read()
-        npimg = np.frombuffer(contents, np.uint8)
-        img = cv2.imdecode(npimg, cv2.IMREAD_COLOR)
+        try:
+            # Read the file content into numpy array
+            contents = await file.read()
+            np_array = np.frombuffer(contents, np.uint8)
+            img = cv2.imdecode(np_array, cv2.IMREAD_COLOR)
 
-        ok, decoded_info, decoded_type, points = detector.detectAndDecode(img)
+            if img is None:
+                return JSONResponse(
+                    status_code=400,
+                    content={"error": f"Failed to decode image {file.filename}"}
+                )
 
-        if ok:
-            for barcode in decoded_info:
-                results.append({
-                    "filename": file.filename,
-                    "barcode": barcode
-                })
+            # Example: get image dimensions
+            height, width, channels = img.shape
+            results.append({
+                "filename": file.filename,
+                "height": height,
+                "width": width,
+                "channels": channels
+            })
 
-    output = io.StringIO()
-    writer = csv.DictWriter(output, fieldnames=["filename", "barcode"])
-    writer.writeheader()
-    writer.writerows(results)
-    output.seek(0)
+        except Exception as e:
+            return JSONResponse(
+                status_code=500,
+                content={"error": f"Failed processing {file.filename}: {str(e)}"}
+            )
 
-    return StreamingResponse(
-        iter([output.getvalue()]),
-        media_type="text/csv",
-        headers={"Content-Disposition": "attachment; filename=barcodes.csv"}
-    )
+    return {"status": "success", "files": results}
