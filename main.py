@@ -7,6 +7,10 @@ import numpy as np
 import io
 import csv
 
+origins = [
+    "http://localhost:5500",  # your frontend origin
+    "http://127.0.0.1:5500",  # sometimes needed
+    "*",  # allow all origins (not recommended for production)
 app = FastAPI()
 
 app.add_middleware(
